@@ -68,6 +68,24 @@ qc_info <- function(expr_dt, meta_dt) {
   return(stat_all)
 }
 
+#' Get color mapping for samples
+#' @param samples Vector of sample names
+#' @return Named vector of colors
+#' @export
+get_sample_colors <- function(samples) {
+  # Define fixed color palette
+  color_palette <- c(
+    "D5" = "#4CC3D9",  # Blue
+    "D6" = "#7BC8A4",  # Green
+    "F7" = "#FFC65D",  # Yellow
+    "M8" = "#F16745"   # Red
+  )
+
+  # Return colors only for existing samples
+  available_colors <- color_palette[samples]
+  return(available_colors)
+}
+
 #' Calculating SNR value; Plotting a PCA panel
 #' @param expr_dt A expression profile (at protein level)
 #' @param meta_dt A metadata file
@@ -108,6 +126,28 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
 
   # PCA --------------------------------------------
   expr_df_t <- t(expr_df)
+
+  # Remove constant/zero variance features before PCA
+  col_vars <- apply(expr_df_t, 2, var, na.rm = TRUE)
+  zero_var_cols <- which(col_vars == 0 | is.na(col_vars))
+
+  # 记录原始特征数和过滤后特征数
+  n_features_original <- ncol(expr_df_t)
+  n_features_removed <- length(zero_var_cols)
+
+  if (n_features_removed > 0) {
+    message(sprintf("Removing %d features with zero variance before PCA analysis.",
+                    n_features_removed))
+    expr_df_t <- expr_df_t[, -zero_var_cols, drop = FALSE]
+  }
+
+  n_features_used <- ncol(expr_df_t)
+
+  # Check if enough features remain
+  if (n_features_used < 2) {
+    stop("Not enough features with non-zero variance for PCA analysis. At least 2 features required.")
+  }
+
   pca_prcomp <- prcomp(expr_df_t, retx = T, scale. = T)
   pcs <- as.data.frame(predict(pca_prcomp))
   pcs$sample_id <- rownames(pcs)
@@ -137,10 +177,10 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
 
   # Plot -------------------------------------------
   if (plot) {
-    colors_custom <- c("D5" = "#4CC3D9",
-                     "D6" = "#7BC8A4",
-                     "F7" = "#FFC65D",
-                     "M8" = "#F16745")
+    # Get unique samples from metadata
+    unique_samples <- unique(meta_dt$sample)
+    colors_custom <- get_sample_colors(unique_samples)
+
     text_custom_theme <- element_text(size = 16,
                                       face = "plain",
                                       color = "black",
@@ -151,12 +191,17 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
     pc1_prop <- summary(pca_prcomp)$importance[2, 1]
     pc2_prop <- summary(pca_prcomp)$importance[2, 2]
     text_axis_x <- sprintf("PC1(%.2f%%)", pc1_prop * 100)
-    text_axis_y <- sprintf("PC2(%.2f%%)", pc1_prop * 100)
+    text_axis_y <- sprintf("PC2(%.2f%%)", pc2_prop * 100)
     limit_x <- c(1.1 * scale_axis_x[1], 1.1 * scale_axis_x[2])
     limit_y <- c(1.1 * scale_axis_y[1], 1.1 * scale_axis_y[2])
 
+
+    # 修改图表标题，显示实际使用的特征数
     p_title <- paste("SNR = ", signoise_db, sep = "")
-    p_subtitle <- paste("(Number of proteins = ", nrow(expr_dt), ")", sep = "")
+    p_subtitle <- paste("(Proteins used in PCA = ", n_features_used,
+                        "/", n_features_original, ")", sep = "")
+    # p_title <- paste("SNR = ", signoise_db, sep = "")
+    # p_subtitle <- paste("(Number of proteins = ", nrow(expr_dt), ")", sep = "")
     p <- ggplot(pcs, aes(x = .data$PC1, y = .data$PC2)) +
       geom_point(aes(color = sample), size = 8) +
       theme_few() +
@@ -189,7 +234,7 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
     output_dir_final2 <- file.path(output_dir, "pca_table.tsv")
     write.table(output, output_dir_final2, sep = "\t", row.names = F)
   }
-  
+
   # return(list(table = output, SNR = signoise_db)
   return(list(table = output, SNR = signoise_db, snr_plot = p))
 }
@@ -254,7 +299,7 @@ dep_analysis <- function(expr, group) {
 #' @export
 
 qc_cor <- function(expr_dt, meta_dt,
-                   output_dir=NULL, plot=FALSE, show_sample_pairs=FALSE) {
+                   output_dir=NULL, plot=FALSE, show_sample_pairs=TRUE) {
 
   # Load data ------------------------------------------------------
   # load(system.file("data/reference_dataset.rda", package = "protqc"))
@@ -276,33 +321,40 @@ qc_cor <- function(expr_dt, meta_dt,
 
   # Check the grouping info ----------------------------------------
   samples <- as.character(unique(meta_dt$sample))
-  if (length(samples) > 1) {
-    check_d6 <- "D6" %in% samples
-    if (!check_d6) {
-      stop("No D6 samples are available.")
-    } else {
-      samples <- c("D6", samples[!samples %in% "D6"])
-      pair_num <- length(samples[!samples %in% "D6"])
-    }
-  } else {
-    stop("No grouping info.")
+
+  # Modified: Flexibly identify which samples exist
+  if (length(samples) < 2) {
+    stop("At least 2 different sample types are required for correlation analysis.")
   }
+
+  # Check if D6 exists (reference sample)
+  check_d6 <- "D6" %in% samples
+  if (!check_d6) {
+    warning("D6 (reference sample) is not available. Using the first sample as reference.")
+    reference_sample <- samples[1]
+    samples <- c(reference_sample, samples[!samples %in% reference_sample])
+  } else {
+    reference_sample <- "D6"
+    samples <- c("D6", samples[!samples %in% "D6"])
+  }
+
+  pair_num <- length(samples) - 1
 
   # Analysis: Differential expression ------------------------------
   result_final <- c()
   for (j in 2:(pair_num + 1)) {
-    sample_pair <- paste(samples[j], "D6", sep = "/")
+    sample_pair <- paste(samples[j], reference_sample, sep = "/")
     ref_tmp <- ref_dt[ref_dt$Sample.Pair %in% sample_pair, ]
 
     col1 <- which(meta_dt$sample %in% samples[j])
-    col2 <- which(meta_dt$sample %in% "D6")
+    col2 <- which(meta_dt$sample %in% reference_sample)
 
     e_tmp <- expr_matrix[, c(col1, col2)]
     e_tmp <- e_tmp[apply(e_tmp, 1, function(x) length(which(x == 0)) < min(length(col1), length(col2))), ]
     expr_grouped <- e_tmp[rownames(e_tmp) %in% ref_tmp$Sequence, ]
 
-    sample_pairs <- factor(x = rep(c(samples[j], "D6"), each = c(length(col1), length(col2))),
-                           levels = c("D6", samples[j]),
+    sample_pairs <- factor(x = rep(c(samples[j], reference_sample), each = c(length(col1), length(col2))),
+                           levels = c(reference_sample, samples[j]),
                            ordered = T)
     result_tmp <- dep_analysis(expr = expr_grouped, group = sample_pairs)
     result_tmp <- result_tmp[result_tmp$adj.P.Val < 0.05, ]
@@ -325,6 +377,60 @@ qc_cor <- function(expr_dt, meta_dt,
   cor_value <- cor(x = df_test$logFC.Test, y = df_test$logFC.Reference)
   cor_value <- round(cor_value, 3)
 
+  # # Plot ----------------------------------------------------------
+  # if (plot) {
+  #   text_custom_theme <- element_text(size = 16,
+  #                                     face = "plain",
+  #                                     color = "black",
+  #                                     hjust = 0.5)
+  #
+  #   scale_axis_r <- c(min(df_test$logFC.Reference),
+  #                     max(df_test$logFC.Reference))
+  #   scale_axis_t <- c(min(df_test$logFC.Test),
+  #                     max(df_test$logFC.Test))
+  #   limit <- max(abs(c(scale_axis_r, scale_axis_t)))
+  #   limit_axis <- c(- limit, limit)
+  #
+  #   plot_title <- paste("RC = ", cor_value, sep = "")
+  #   plot_subtitle <- paste("(Number of peptides = ", nrow(df_test), ")", sep = "")
+  #
+  #   p <- ggplot(df_test, aes(x = .data$logFC.Reference, y = .data$logFC.Test)) +
+  #     theme_few() +
+  #     theme(plot.title = text_custom_theme,
+  #           plot.subtitle = text_custom_theme,
+  #           axis.title = text_custom_theme,
+  #           axis.text = text_custom_theme,
+  #           legend.title = text_custom_theme,
+  #           legend.text = element_text(size = 16, color = "gray40")) +
+  #     labs(y = "log2FC (Test Datasets)",
+  #         x = "log2FC (Reference Datasets)",
+  #         title = plot_title,
+  #         subtitle = plot_subtitle) +
+  #     coord_fixed(xlim = limit_axis, ylim = limit_axis)
+  #
+  #   if (show_sample_pairs == T) {
+  #     # Create color mapping based on numerator (first sample in pair)
+  #     # Extract numerator from Sample.Pair
+  #     df_test$Numerator <- sapply(strsplit(as.character(df_test$Sample.Pair), "/"), function(x) x[1])
+  #     unique_numerators <- unique(df_test$Numerator)
+  #     pair_colors <- get_sample_colors(unique_numerators)
+  #
+  #     # Create full pair color mapping
+  #     colors_custom <- c()
+  #     for (pair in unique(df_test$Sample.Pair)) {
+  #       numerator <- strsplit(as.character(pair), "/")[[1]][1]
+  #       colors_custom[pair] <- pair_colors[numerator]
+  #     }
+  #
+  #     p <- p +
+  #       geom_point(aes(color = .data$Sample.Pair), size = 2.5, alpha = .5) +
+  #       scale_color_manual(values = colors_custom)
+  #   } else {
+  #     p <- p + geom_point(color = "steelblue4", size = 2.5, alpha = .1)
+  #   }
+  #
+  # }
+
   # Plot ----------------------------------------------------------
   if (plot) {
     text_custom_theme <- element_text(size = 16,
@@ -342,6 +448,25 @@ qc_cor <- function(expr_dt, meta_dt,
     plot_title <- paste("RC = ", cor_value, sep = "")
     plot_subtitle <- paste("(Number of peptides = ", nrow(df_test), ")", sep = "")
 
+    # 动态生成样本对的颜色映射（基于分子的颜色）
+    unique_comps <- unique(df_test$Sample.Pair)
+    pair_colors <- sapply(unique_comps, function(comp_name) {
+      # 提取样本对的分子（numerator），格式为 "Sample1/Sample2"
+      numerator_sample <- strsplit(as.character(comp_name), "/")[[1]][1]
+      color_palette <- c(
+        "D5" = "#4CC3D9",
+        "D6" = "#7BC8A4",
+        "F7" = "#FFC65D",
+        "M8" = "#F16745"
+      )
+      if (numerator_sample %in% names(color_palette)) {
+        return(color_palette[[numerator_sample]])
+      } else {
+        return("gray") # 默认颜色
+      }
+    })
+    names(pair_colors) <- unique_comps
+
     p <- ggplot(df_test, aes(x = .data$logFC.Reference, y = .data$logFC.Test)) +
       theme_few() +
       theme(plot.title = text_custom_theme,
@@ -351,19 +476,16 @@ qc_cor <- function(expr_dt, meta_dt,
             legend.title = text_custom_theme,
             legend.text = element_text(size = 16, color = "gray40")) +
       labs(y = "log2FC (Test Datasets)",
-          x = "log2FC (Reference Datasets)",
-          title = plot_title,
-          subtitle = plot_subtitle) +
+           x = "log2FC (Reference Datasets)",
+           title = plot_title,
+           subtitle = plot_subtitle) +
       coord_fixed(xlim = limit_axis, ylim = limit_axis)
 
     if (show_sample_pairs == T) {
-      colors_custom <- c("D5/D6" = "#4CC3D9",
-                        "F7/D6" = "#FFC65D",
-                        "M8/D6" = "#F16745")
       p <- p +
         geom_point(aes(color = .data$Sample.Pair), size = 2.5, alpha = .5) +
-        scale_color_manual(values = colors_custom)
-    }else {
+        scale_color_manual(values = pair_colors, name = "Sample Pair")
+    } else {
       p <- p + geom_point(color = "steelblue4", size = 2.5, alpha = .1)
     }
 
