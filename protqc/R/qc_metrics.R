@@ -5,9 +5,7 @@
 #' @importFrom psych corr.test
 #' @importFrom reshape2 melt
 #' @export
-
 qc_info <- function(expr_dt, meta_dt) {
-
   # Load data --------------------------------
   m <- meta_dt
   d <- expr_dt
@@ -52,14 +50,16 @@ qc_info <- function(expr_dt, meta_dt) {
   d_long <- melt(d)
   d_long <- na.omit(d_long)
   if (length(d_long$value[d_long$value < 0])) {
-    d_long$value <- 2 ^ (d_long$value)
+    d_long$value <- 2^(d_long$value)
     message("There are negative values. Default to log2-transformed values.")
   }
   d_long <- merge(d_long, m, by.x = "variable", by.y = "library")
   colnames(d_long) <- c("library", "feature", "value", "sample")
   d_cv <- aggregate(
-    value ~ feature + sample, data = d_long,
-    FUN = function(x) sd(x) / mean(x))
+    value ~ feature + sample,
+    data = d_long,
+    FUN = function(x) sd(x) / mean(x)
+  )
   stat_cv <- round(median(d_cv$value, na.rm = T) * 100, 3)
 
   # Output -----------------------------------
@@ -75,10 +75,10 @@ qc_info <- function(expr_dt, meta_dt) {
 get_sample_colors <- function(samples) {
   # Define fixed color palette
   color_palette <- c(
-    "D5" = "#4CC3D9",  # Blue
-    "D6" = "#7BC8A4",  # Green
-    "F7" = "#FFC65D",  # Yellow
-    "M8" = "#F16745"   # Red
+    "D5" = "#4CC3D9", # Blue
+    "D6" = "#7BC8A4", # Green
+    "F7" = "#FFC65D", # Yellow
+    "M8" = "#F16745" # Red
   )
 
   # Return colors only for existing samples
@@ -109,9 +109,7 @@ get_sample_colors <- function(samples) {
 #' @importFrom ggplot2 ggsave
 #' @importFrom ggthemes theme_few
 #' @export
-
-qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
-
+qc_snr <- function(expr_dt, meta_dt, output_dir = NULL, plot = TRUE) {
   # Load data --------------------------------------
   expr_ncol <- ncol(expr_dt)
   expr_df <- data.frame(expr_dt[, 2:expr_ncol], row.names = expr_dt[, 1])
@@ -136,8 +134,10 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
   n_features_removed <- length(zero_var_cols)
 
   if (n_features_removed > 0) {
-    message(sprintf("Removing %d features with zero variance before PCA analysis.",
-                    n_features_removed))
+    message(sprintf(
+      "Removing %d features with zero variance before PCA analysis.",
+      n_features_removed
+    ))
     expr_df_t <- expr_df_t[, -zero_var_cols, drop = FALSE]
   }
 
@@ -154,21 +154,26 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
   pcs$sample <- meta_dt$sample
 
   # Calculating: SNR -------------------------------
-  dt_perc_pcs <- data.table(PCX = 1:nrow(pcs),
-                            Percent = summary(pca_prcomp)$importance[2, ],
-                            AccumPercent = summary(pca_prcomp)$importance[3, ])
+  dt_perc_pcs <- data.table(
+    PCX = 1:nrow(pcs),
+    Percent = summary(pca_prcomp)$importance[2, ],
+    AccumPercent = summary(pca_prcomp)$importance[3, ]
+  )
 
-  dt_dist <- data.table(id_a = rep(ids, each = length(ids)),
-                        id_b = rep(ids, time = length(ids)))
+  dt_dist <- data.table(
+    id_a = rep(ids, each = length(ids)),
+    id_b = rep(ids, time = length(ids))
+  )
 
   dt_dist$group_a <- ids_group_mat[match(dt_dist$id_a, ids_group_mat$id)]$group
   dt_dist$group_b <- ids_group_mat[match(dt_dist$id_b, ids_group_mat$id)]$group
 
   dt_dist[, type := ifelse(id_a == id_b, "Same",
-                           ifelse(group_a == group_b, "Intra", "Inter"))]
+    ifelse(group_a == group_b, "Intra", "Inter")
+  )]
 
   dt_dist[, dist := (dt_perc_pcs[1]$Percent * (pcs[id_a, 1] - pcs[id_b, 1])^2 +
-                      dt_perc_pcs[2]$Percent * (pcs[id_a, 2] - pcs[id_b, 2])^2)]
+    dt_perc_pcs[2]$Percent * (pcs[id_a, 2] - pcs[id_b, 2])^2)]
 
   dt_dist_stats <- dt_dist[, list(avg_dist = mean(dist)), by = list(type)]
   setkey(dt_dist_stats, type)
@@ -181,10 +186,12 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
     unique_samples <- unique(meta_dt$sample)
     colors_custom <- get_sample_colors(unique_samples)
 
-    text_custom_theme <- element_text(size = 16,
-                                      face = "plain",
-                                      color = "black",
-                                      hjust = 0.5)
+    text_custom_theme <- element_text(
+      size = 16,
+      face = "plain",
+      color = "black",
+      hjust = 0.5
+    )
     scale_axis_x <- c(min(pcs$PC1), max(pcs$PC1))
     scale_axis_y <- c(min(pcs$PC2), max(pcs$PC2))
 
@@ -199,22 +206,28 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
     # 修改图表标题，显示实际使用的特征数
     p_title <- paste("SNR = ", signoise_db, sep = "")
     p_subtitle <- paste("(Proteins used in PCA = ", n_features_used,
-                        "/", n_features_original, ")", sep = "")
+      "/", n_features_original, ")",
+      sep = ""
+    )
     # p_title <- paste("SNR = ", signoise_db, sep = "")
     # p_subtitle <- paste("(Number of proteins = ", nrow(expr_dt), ")", sep = "")
     p <- ggplot(pcs, aes(x = .data$PC1, y = .data$PC2)) +
       geom_point(aes(color = sample), size = 8) +
       theme_few() +
-      theme(plot.title = text_custom_theme,
-            plot.subtitle = text_custom_theme,
-            axis.title = text_custom_theme,
-            axis.text = text_custom_theme,
-            legend.title = text_custom_theme,
-            legend.text = element_text(size = 16, color = "gray40")) +
-      labs(x = text_axis_x,
-          y = text_axis_y,
-          title = p_title,
-          subtitle = p_subtitle) +
+      theme(
+        plot.title = text_custom_theme,
+        plot.subtitle = text_custom_theme,
+        axis.title = text_custom_theme,
+        axis.text = text_custom_theme,
+        legend.title = text_custom_theme,
+        legend.text = element_text(size = 16, color = "gray40")
+      ) +
+      labs(
+        x = text_axis_x,
+        y = text_axis_y,
+        title = p_title,
+        subtitle = p_subtitle
+      ) +
       scale_color_manual(values = colors_custom) +
       scale_x_continuous(limits = limit_x) +
       scale_y_continuous(limits = limit_y) +
@@ -251,11 +264,9 @@ qc_snr <- function(expr_dt, meta_dt, output_dir=NULL, plot=TRUE) {
 #' @importFrom limma eBayes
 #' @importFrom limma topTable
 #' @export
-
 dep_analysis <- function(expr, group) {
-
   dge <- DGEList(counts = expr)
-  design <- model.matrix(~ group)
+  design <- model.matrix(~group)
 
   keep <- filterByExpr(dge, design)
   dge <- dge[keep, , keep.lib.sizes = FALSE]
@@ -273,7 +284,6 @@ dep_analysis <- function(expr, group) {
   result$Sample.Pair <- paste(levels(group)[2], levels(group)[1], sep = "/")
 
   return(result)
-
 }
 
 #' Calculating RC value; Plotting a scatterplot
@@ -297,10 +307,8 @@ dep_analysis <- function(expr, group) {
 #' @importFrom data.table as.data.table
 #' @importFrom ggplot2 ggsave
 #' @export
-
 qc_cor <- function(expr_dt, meta_dt,
-                   output_dir=NULL, plot=FALSE, show_sample_pairs=TRUE) {
-
+                   output_dir = NULL, plot = FALSE, show_sample_pairs = TRUE) {
   # Load data ------------------------------------------------------
   # load(system.file("data/reference_dataset.rda", package = "protqc"))
   data("reference_dataset", package = "protqc")
@@ -315,7 +323,7 @@ qc_cor <- function(expr_dt, meta_dt,
 
   # Check if negative values exist ----------------------------------
   if (length(expr_matrix[expr_matrix < 0])) {
-    expr_matrix <- 2 ^ (expr_matrix)
+    expr_matrix <- 2^(expr_matrix)
     message("There are negative values. Default to log2-transformed values.")
   }
 
@@ -353,14 +361,15 @@ qc_cor <- function(expr_dt, meta_dt,
     e_tmp <- e_tmp[apply(e_tmp, 1, function(x) length(which(x == 0)) < min(length(col1), length(col2))), ]
     expr_grouped <- e_tmp[rownames(e_tmp) %in% ref_tmp$Sequence, ]
 
-    sample_pairs <- factor(x = rep(c(samples[j], reference_sample), each = c(length(col1), length(col2))),
-                           levels = c(reference_sample, samples[j]),
-                           ordered = T)
+    sample_pairs <- factor(
+      x = rep(c(samples[j], reference_sample), each = c(length(col1), length(col2))),
+      levels = c(reference_sample, samples[j]),
+      ordered = T
+    )
     result_tmp <- dep_analysis(expr = expr_grouped, group = sample_pairs)
     result_tmp <- result_tmp[result_tmp$adj.P.Val < 0.05, ]
 
     result_final <- rbind(result_final, result_tmp)
-
   }
 
   # Calculating: RC -----------------------------------------------
@@ -371,8 +380,10 @@ qc_cor <- function(expr_dt, meta_dt,
   result_withref <- merge(result_trim, ref_dt, by = "name")
 
   df_test <- data.frame(result_withref[, c(1, 2, 3, 4, 7)])
-  colnames(df_test) <- c("Name", "Sequence", "Sample.Pair",
-                         "logFC.Test", "logFC.Reference")
+  colnames(df_test) <- c(
+    "Name", "Sequence", "Sample.Pair",
+    "logFC.Test", "logFC.Reference"
+  )
 
   cor_value <- cor(x = df_test$logFC.Test, y = df_test$logFC.Reference)
   cor_value <- round(cor_value, 3)
@@ -433,17 +444,23 @@ qc_cor <- function(expr_dt, meta_dt,
 
   # Plot ----------------------------------------------------------
   if (plot) {
-    text_custom_theme <- element_text(size = 16,
-                                      face = "plain",
-                                      color = "black",
-                                      hjust = 0.5)
+    text_custom_theme <- element_text(
+      size = 16,
+      face = "plain",
+      color = "black",
+      hjust = 0.5
+    )
 
-    scale_axis_r <- c(min(df_test$logFC.Reference),
-                      max(df_test$logFC.Reference))
-    scale_axis_t <- c(min(df_test$logFC.Test),
-                      max(df_test$logFC.Test))
+    scale_axis_r <- c(
+      min(df_test$logFC.Reference),
+      max(df_test$logFC.Reference)
+    )
+    scale_axis_t <- c(
+      min(df_test$logFC.Test),
+      max(df_test$logFC.Test)
+    )
     limit <- max(abs(c(scale_axis_r, scale_axis_t)))
-    limit_axis <- c(- limit, limit)
+    limit_axis <- c(-limit, limit)
 
     plot_title <- paste("RC = ", cor_value, sep = "")
     plot_subtitle <- paste("(Number of peptides = ", nrow(df_test), ")", sep = "")
@@ -469,16 +486,20 @@ qc_cor <- function(expr_dt, meta_dt,
 
     p <- ggplot(df_test, aes(x = .data$logFC.Reference, y = .data$logFC.Test)) +
       theme_few() +
-      theme(plot.title = text_custom_theme,
-            plot.subtitle = text_custom_theme,
-            axis.title = text_custom_theme,
-            axis.text = text_custom_theme,
-            legend.title = text_custom_theme,
-            legend.text = element_text(size = 16, color = "gray40")) +
-      labs(y = "log2FC (Test Datasets)",
-           x = "log2FC (Reference Datasets)",
-           title = plot_title,
-           subtitle = plot_subtitle) +
+      theme(
+        plot.title = text_custom_theme,
+        plot.subtitle = text_custom_theme,
+        axis.title = text_custom_theme,
+        axis.text = text_custom_theme,
+        legend.title = text_custom_theme,
+        legend.text = element_text(size = 16, color = "gray40")
+      ) +
+      labs(
+        y = "log2FC (Test Datasets)",
+        x = "log2FC (Reference Datasets)",
+        title = plot_title,
+        subtitle = plot_subtitle
+      ) +
       coord_fixed(xlim = limit_axis, ylim = limit_axis)
 
     if (show_sample_pairs == T) {
@@ -488,7 +509,6 @@ qc_cor <- function(expr_dt, meta_dt,
     } else {
       p <- p + geom_point(color = "steelblue4", size = 2.5, alpha = .1)
     }
-
   }
 
   # Save & Output -------------------------------------------------
@@ -503,10 +523,12 @@ qc_cor <- function(expr_dt, meta_dt,
     write.table(df_test, output_dir_final3, sep = "\t", row.names = F)
   }
 
-  output_list <- list(DEPs = result_final,
-                      logfc = df_test,
-                      COR = cor_value,
-                      cor_plot = p)
+  output_list <- list(
+    DEPs = result_final,
+    logfc = df_test,
+    COR = cor_value,
+    cor_plot = p
+  )
 
   return(output_list)
 }

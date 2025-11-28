@@ -9,7 +9,7 @@ qc_cor(
   meta_dt,
   output_dir = NULL,
   plot = FALSE,
-  show_sample_pairs = FALSE
+  show_sample_pairs = TRUE
 )
 }
 \arguments{

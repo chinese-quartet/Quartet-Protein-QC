@@ -26,23 +26,18 @@ devtools::install_github("markx945/protqc",subdir = "protqc")
 
 ## Examples
 ```
-### Calculate QC metrics
-### your data path
-# exp_path <- './test/input/example_data_for_test1.csv'
-# meta_path <- './test/input/example_meta_for_test1.csv'
-
 ## example data
 example_prot_data_path <- system.file("extdata","proteomics_pipeline_data_template.csv",package = "protqc")
 example_prot_metadata_path <- system.file("extdata","proteomics_pipeline_meta_template.csv",package = "protqc")
 output_dir <- './test/output/test1'
+
+## Calculate QC metrics
 prot_result <- protqc::qc_conclusion(example_prot_data_path, example_prot_metadata_path, output_dir, plot=TRUE)
 
-### Generate report
-# path to report template
-doc_file_path_example <- system.file("extdata", "Quartet_temp.docx", package = "protqc")
+## Generate report
+report_template <- system.file("extdata", "quartet_template.docx", package = "protqc")
 
-GenerateProteinReport(Prot_result=prot_result, doc_file_path=doc_file_path_example, output_path=output_dir)
-
+generate_protein_report(qc_result=prot_result, report_template=report_template)
 ```
 
 ## Built-in Data
@@ -66,10 +61,9 @@ GenerateProteinReport(Prot_result=prot_result, doc_file_path=doc_file_path_examp
    > These files are all output of the function ***qc_history()***.
 
 ## Examples for the input data
-1. ./test/input/example_data_for_test1.csv & ./test/input/example_data_for_test2.csv<br />
-   This file is an example for profiled data at protein levels and peptide levels (for these functions: ***input_data()***, ***qc_info()***, ***qc_snr()***, ***qc_cor()***, ***qc_conclusion()***), containing quantitative levels in each sample (replicate). The first two columns ("Type" and "Feature") are required to explain the feature type, which is either "Gene Symbol", or "Peptide Sequence") and the feature name. The missing values of data are replaced by *NA* or *0*.
-   > If you only provide data at protein levels (refer to the file *example_data_for_test2.csv*), then the metric RC will not be calculated.
+1. ./inst/extdata/proteomics_pipeline_data_template.csv & ./inst/extdata/proteomics_pipeline_data_template_1.csv<br />
+   This file is an example for profiled data at protein levels and peptide levels (for these functions: ***input_data()***, ***qc_info()***, ***qc_snr()***, ***qc_cor()***, ***qc_conclusion()***), containing quantitative levels in each sample (replicate). The first two columns ("Type" and "Feature") are required to explain the feature type, which is either ("Gene Symbol", or "Peptide Sequence") and the feature name. The missing values of data are replaced by *NA* or *0*.
 
-2. ./test/input/example_meta_for_test1.csv & ./test/input/example_meta_for_test2.csv<br />
+2. ./inst/extdata/proteomics_pipeline_meta_template.csv & ./test/input/proteomics_pipeline_meta_template_1.csv<br />
    This file is an example for proteomic metadata. The columns "library" and "sample" are required.
    > The column names of profiled data (except the first two columns) and the column 'library' of metadata must be in one-to-one correspondence.

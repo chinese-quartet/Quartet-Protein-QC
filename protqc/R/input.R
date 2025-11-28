@@ -8,9 +8,7 @@
 #' @importFrom dplyr rename_with
 #' @importFrom dplyr select
 #' @export
-
 input_data <- function(exp_path, meta_path) {
-
   # Load data ------------------------------------------------
   expr <- fread(exp_path)
   meta <- fread(meta_path)
@@ -25,24 +23,21 @@ input_data <- function(exp_path, meta_path) {
   # metadata file: name -> library, sample
   # data file: rowname -> Type, Feature, xxx
 
-  if(length(which(duplicated(colnames(expr))))) {
-    stop('Duplicated column names in data.')
+  if (length(which(duplicated(colnames(expr))))) {
+    stop("Duplicated column names in data.")
     print(1)
   }
 
   col_check1 <- c("name", "library", "sample") %in% colnames(meta)
   if ((col_check1[1] | col_check1[2]) & col_check1[3]) {
-
     meta_final <- meta %>% select(any_of(c("name", "library", "sample")))
     colnames(meta_final) <- c("library", "sample")
 
-    if(length(which(duplicated(meta_final$library)))) {
-
-      stop('Duplicated column names in metadata.')
+    if (length(which(duplicated(meta_final$library)))) {
+      stop("Duplicated column names in metadata.")
       print(1)
     }
   } else {
-
     stop('The columns named "library" and "sample" are required in metadata.')
     print(1)
   }
@@ -78,14 +73,12 @@ input_data <- function(exp_path, meta_path) {
       "expdata_peptideLevel" = expr_pep,
       "metadata" = meta_final
     )
-
   } else {
     message("You only input data at protein levels.")
     data_list <- list(
       "expdata_proteinLevel" = expr_pro,
       "metadata" = meta_final
     )
-
   }
 
   return(data_list)
