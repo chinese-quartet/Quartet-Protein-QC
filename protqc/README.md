@@ -9,16 +9,9 @@
   5.	***Signal-to-Noise Ratio (SNR)***: SNR is established to characterize the ability of a platform or lab or batch, which is able to distinguish intrinsic differences among distinct biological sample groups (“signal”) from variations in technical replicates of the same sample group ("noise").
   6.	***Relative Correlation with Reference Datasets (RC)***: RC is used for assessment of quantitative consistency with the reference dataset at relative levels. For shotgun proteomics, quantitation at peptide levels is theoretically more reliable. Therefore, the reference dataset is established by benchmarking the relative expression values (log2FCs), for each peptide sequence of each sample pair (D5/D6, F7/D6, M8/D6), in historical datasets at peptide levels. We calculate relatively qualified (satisfied with thresholds of p < 0.05) log2FCs of the queried data, for overlapped peptides with the reference dataset, as the input for the assessment of quantitative consistency. Then RC value is Pearson correlation coefficient between the test dataset and the reference dataset.
 
-
-
-## Depends
+## Dependencies
   Environment: R (>= 3.5.0)<br />
   Packages: dplyr,data.table,ggplot2,ggthemes,edgeR,limma,reshape2,psych,officer,flextable
-
-## Installation
-```
-devtools::install_github("markx945/protqc",subdir = "protqc")
-```
 
 ## Usage
   protqc::qc_conclusion(exp_path, meta_path, output_dir, plot)
@@ -27,17 +20,16 @@ devtools::install_github("markx945/protqc",subdir = "protqc")
 ## Examples
 ```
 ## example data
-example_prot_data_path <- system.file("extdata","proteomics_pipeline_data_template.csv",package = "protqc")
-example_prot_metadata_path <- system.file("extdata","proteomics_pipeline_meta_template.csv",package = "protqc")
-output_dir <- './test/output/test1'
+example_prot_data_path <- system.file("extdata", "proteomics_pipeline_data_template.csv", package = "protqc")
+example_prot_metadata_path <- system.file("extdata", "proteomics_pipeline_meta_template.csv", package = "protqc")
 
 ## Calculate QC metrics
-prot_result <- protqc::qc_conclusion(example_prot_data_path, example_prot_metadata_path, output_dir, plot=TRUE)
+prot_result <- protqc::qc_conclusion(example_prot_data_path, example_prot_metadata_path)
 
 ## Generate report
 report_template <- system.file("extdata", "quartet_template.docx", package = "protqc")
 
-generate_protein_report(qc_result=prot_result, report_template=report_template)
+generate_protein_report(qc_result=prot_result, report_template = report_template)
 ```
 
 ## Built-in Data
