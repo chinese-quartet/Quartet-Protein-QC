@@ -33,9 +33,10 @@
 #' @importFrom officer read_docx
 #'
 #' @examples
-#' # 加载示例 Protein_result 对象
-#' protein_qc_result_path <- system.file("extdata", "protein_qc_result_example", package = "protqc")
-#' load(protein_qc_result_path)
+#' # 加载示例数据
+#' example_prot_data_path <- system.file("extdata", "proteomics_pipeline_data_template.csv", package = "protqc")
+#' example_prot_metadata_path <- system.file("extdata", "proteomics_pipeline_meta_template.csv", package = "protqc")
+#' qc_result <- qc_conclusion(example_prot_data_path, example_prot_metadata_path)
 #'
 #' # 指定包内文档的路径
 #' report_template <- system.file("extdata", "quartet_template.docx", package = "protqc")
