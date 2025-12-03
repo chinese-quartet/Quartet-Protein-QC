@@ -9,16 +9,9 @@
   5.	***Signal-to-Noise Ratio (SNR)***: SNR is established to characterize the ability of a platform or lab or batch, which is able to distinguish intrinsic differences among distinct biological sample groups (“signal”) from variations in technical replicates of the same sample group ("noise").
   6.	***Relative Correlation with Reference Datasets (RC)***: RC is used for assessment of quantitative consistency with the reference dataset at relative levels. For shotgun proteomics, quantitation at peptide levels is theoretically more reliable. Therefore, the reference dataset is established by benchmarking the relative expression values (log2FCs), for each peptide sequence of each sample pair (D5/D6, F7/D6, M8/D6), in historical datasets at peptide levels. We calculate relatively qualified (satisfied with thresholds of p < 0.05) log2FCs of the queried data, for overlapped peptides with the reference dataset, as the input for the assessment of quantitative consistency. Then RC value is Pearson correlation coefficient between the test dataset and the reference dataset.
 
-
-
-## Depends
+## Dependencies
   Environment: R (>= 3.5.0)<br />
   Packages: dplyr,data.table,ggplot2,ggthemes,edgeR,limma,reshape2,psych,officer,flextable
-
-## Installation
-```
-devtools::install_github("markx945/protqc",subdir = "protqc")
-```
 
 ## Usage
   protqc::qc_conclusion(exp_path, meta_path, output_dir, plot)
@@ -26,23 +19,17 @@ devtools::install_github("markx945/protqc",subdir = "protqc")
 
 ## Examples
 ```
-### Calculate QC metrics
-### your data path
-# exp_path <- './test/input/example_data_for_test1.csv'
-# meta_path <- './test/input/example_meta_for_test1.csv'
-
 ## example data
-example_prot_data_path <- system.file("extdata","proteomics_pipeline_data_template.csv",package = "protqc")
-example_prot_metadata_path <- system.file("extdata","proteomics_pipeline_meta_template.csv",package = "protqc")
-output_dir <- './test/output/test1'
-prot_result <- protqc::qc_conclusion(example_prot_data_path, example_prot_metadata_path, output_dir, plot=TRUE)
+example_prot_data_path <- system.file("extdata", "proteomics_pipeline_data_template.csv", package = "protqc")
+example_prot_metadata_path <- system.file("extdata", "proteomics_pipeline_meta_template.csv", package = "protqc")
 
-### Generate report
-# path to report template
-doc_file_path_example <- system.file("extdata", "Quartet_temp.docx", package = "protqc")
+## Calculate QC metrics
+prot_result <- protqc::qc_conclusion(example_prot_data_path, example_prot_metadata_path)
 
-GenerateProteinReport(Prot_result=prot_result, doc_file_path=doc_file_path_example, output_path=output_dir)
+## Generate report
+report_template <- system.file("extdata", "quartet_template.docx", package = "protqc")
 
+generate_protein_report(qc_result=prot_result, report_template = report_template)
 ```
 
 ## Built-in Data
@@ -66,10 +53,9 @@ GenerateProteinReport(Prot_result=prot_result, doc_file_path=doc_file_path_examp
    > These files are all output of the function ***qc_history()***.
 
 ## Examples for the input data
-1. ./test/input/example_data_for_test1.csv & ./test/input/example_data_for_test2.csv<br />
-   This file is an example for profiled data at protein levels and peptide levels (for these functions: ***input_data()***, ***qc_info()***, ***qc_snr()***, ***qc_cor()***, ***qc_conclusion()***), containing quantitative levels in each sample (replicate). The first two columns ("Type" and "Feature") are required to explain the feature type, which is either "Gene Symbol", or "Peptide Sequence") and the feature name. The missing values of data are replaced by *NA* or *0*.
-   > If you only provide data at protein levels (refer to the file *example_data_for_test2.csv*), then the metric RC will not be calculated.
+1. ./inst/extdata/proteomics_pipeline_data_template.csv & ./inst/extdata/proteomics_pipeline_data_template_1.csv<br />
+   This file is an example for profiled data at protein levels and peptide levels (for these functions: ***input_data()***, ***qc_info()***, ***qc_snr()***, ***qc_cor()***, ***qc_conclusion()***), containing quantitative levels in each sample (replicate). The first two columns ("Type" and "Feature") are required to explain the feature type, which is either ("Gene Symbol", or "Peptide Sequence") and the feature name. The missing values of data are replaced by *NA* or *0*.
 
-2. ./test/input/example_meta_for_test1.csv & ./test/input/example_meta_for_test2.csv<br />
+2. ./inst/extdata/proteomics_pipeline_meta_template.csv & ./test/input/proteomics_pipeline_meta_template_1.csv<br />
    This file is an example for proteomic metadata. The columns "library" and "sample" are required.
    > The column names of profiled data (except the first two columns) and the column 'library' of metadata must be in one-to-one correspondence.

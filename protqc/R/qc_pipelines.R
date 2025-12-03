@@ -4,7 +4,7 @@
 #' @param x_min Queried minimum in historical values
 #' @param decreasing if True, a decreased linear normalization will be applied.
 #' @export
-qc_linear_norm <- function(x, x_min, x_max, decreasing=F) {
+qc_linear_norm <- function(x, x_min, x_max, decreasing = F) {
   if (length(x) == 1) {
     if (x <= x_min) {
       x <- x_min
@@ -19,7 +19,6 @@ qc_linear_norm <- function(x, x_min, x_max, decreasing=F) {
   }
 
   return(x_norm <- round(x_norm, digits = 3))
-
 }
 
 #' Label the performance: bad, fair, good, great
@@ -29,8 +28,7 @@ qc_linear_norm <- function(x, x_min, x_max, decreasing=F) {
 #' @import stats
 #' @importFrom dplyr between
 #' @export
-
-qc_performance <- function(x, x_ref, cutoff=c(0, 0.2, 0.5, 0.8, 1)) {
+qc_performance <- function(x, x_ref, cutoff = c(0, 0.2, 0.5, 0.8, 1)) {
   ref_perc <- quantile(x_ref, cutoff, na.rm = T)
   if (between(x, ref_perc[1], ref_perc[2])) {
     x_class <- "Bad"
@@ -43,7 +41,6 @@ qc_performance <- function(x, x_ref, cutoff=c(0, 0.2, 0.5, 0.8, 1)) {
   }
 
   return(x_class)
-
 }
 
 #' Rank in historical performances
@@ -52,11 +49,10 @@ qc_performance <- function(x, x_ref, cutoff=c(0, 0.2, 0.5, 0.8, 1)) {
 #' @export
 qc_rank <- function(x, x_hist) {
   x_all <- c(x, x_hist[!is.na(x_hist)])
-  x_pos <- floor(rank(- x_all)[1])
+  x_pos <- floor(rank(-x_all)[1])
   x_rank <- c(paste(x_pos, "/", length(x_all), sep = ""))
 
   return(x_rank)
-
 }
 
 #' Calculating all QC metrics
@@ -66,9 +62,8 @@ qc_rank <- function(x, x_hist) {
 #' @param output_dir A directory for results
 #' @param plot if True, a plot will be output.
 #' @export
-
-qc_allmetrics <- function(pro_dt, meta_dt, pep_dt=NULL,
-                          output_dir=NULL, plot=TRUE) {
+qc_allmetrics <- function(pro_dt, meta_dt, pep_dt = NULL,
+                          output_dir = NULL, plot = TRUE) {
   # Basic information ---------------------------
   pro_info <- qc_info(pro_dt, meta_dt)
 
@@ -80,7 +75,7 @@ qc_allmetrics <- function(pro_dt, meta_dt, pep_dt=NULL,
   if (!is.null(pep_dt)) {
     cor_results <- qc_cor(pep_dt, meta_dt, output_dir, plot)
     cor_value <- cor_results$COR
-  }else {
+  } else {
     cor_results <- NULL
     cor_value <- NA
   }
@@ -118,9 +113,8 @@ qc_allmetrics <- function(pro_dt, meta_dt, pep_dt=NULL,
 #' @param ref_qc_stat historical data set
 #' @param normalized if True, the qc values will be linearly normalized to 1~10.
 #' @export
-
 qc_total <- function(allmetrics_dt,
-                     ref_qc, ref_qc_norm, ref_qc_stat, normalized=T) {
+                     ref_qc, ref_qc_norm, ref_qc_stat, normalized = T) {
   # Normalize & Rank: All metrics ----------------------
   output_class <- c()
   output_norm <- c()
@@ -134,15 +128,16 @@ qc_total <- function(allmetrics_dt,
     if (!is.na(x)) {
       x_max <- max(x_ref, na.rm = T)
       x_min <- min(x_ref, na.rm = T)
-      if (m %in% c("Coefficient of variantion (CV, %)",
-                   "Missing percentage (%)")) {
+      if (m %in% c(
+        "Coefficient of variantion (CV, %)",
+        "Missing percentage (%)"
+      )) {
         x_norm <- qc_linear_norm(x, x_min, x_max, decreasing = T)
       } else {
         x_norm <- qc_linear_norm(x, x_min, x_max)
       }
       x_rank <- qc_rank(x_norm, x_ref_norm)
       x_class <- qc_performance(x_norm, x_ref_norm)
-
     } else {
       x_norm <- NA
       x_rank <- NA

@@ -8,8 +8,7 @@
 #' @importFrom data.table data.table
 #' @importFrom psych geometric.mean
 #' @export
-
-qc_conclusion <- function(exp_path, meta_path, output_dir = NULL, plot=TRUE) {
+qc_conclusion <- function(exp_path, meta_path, output_dir = NULL, plot = TRUE) {
   # Load historical QC results -------------------------
   # load(system.file("data/historical_qc.rda", package = "protqc"))
   # load(system.file("data/historical_qc_norm.rda", package = "protqc"))
@@ -28,7 +27,7 @@ qc_conclusion <- function(exp_path, meta_path, output_dir = NULL, plot=TRUE) {
   meta <- data_list$metadata
   if (length(data_list) == 3) {
     pep_data <- data_list$expdata_peptideLevel
-  }else {
+  } else {
     pep_data <- NULL
   }
 
@@ -46,12 +45,12 @@ qc_conclusion <- function(exp_path, meta_path, output_dir = NULL, plot=TRUE) {
     total_cf <- "100%"
   } else if (total_norm %in% his_ref_norm) {
     total_num <- length(his_ref_norm)
-    total_pos <- floor(rank(- his_ref_norm)[his_ref_norm == total_norm])
+    total_pos <- floor(rank(-his_ref_norm)[his_ref_norm == total_norm])
     total_perc <- (total_num - total_pos) / total_num
     total_cf <- paste((round(total_perc, 4)) * 100, "%", sep = "")
   } else {
     total_num <- length(total_ref_norm)
-    total_pos <- floor(rank(- total_ref_norm)[1])
+    total_pos <- floor(rank(-total_ref_norm)[1])
     total_perc <- (total_num - total_pos) / total_num
     total_cf <- paste((round(total_perc, 4)) * 100, "%", sep = "")
   }
@@ -82,6 +81,3 @@ qc_conclusion <- function(exp_path, meta_path, output_dir = NULL, plot=TRUE) {
 
   return(final_list)
 }
-
-
-
