@@ -361,11 +361,19 @@ qc_cor <- function(expr_dt, meta_dt,
     e_tmp <- e_tmp[apply(e_tmp, 1, function(x) length(which(x == 0)) < min(length(col1), length(col2))), ]
     expr_grouped <- e_tmp[rownames(e_tmp) %in% ref_tmp$Sequence, ]
 
+    # sample_pairs <- factor(
+    #   x = rep(c(samples[j], reference_sample), each = c(length(col1), length(col2))),
+    #   levels = c(reference_sample, samples[j]),
+    #   ordered = T
+    # )
     sample_pairs <- factor(
-      x = rep(c(samples[j], reference_sample), each = c(length(col1), length(col2))),
+      # 修改：将 each 改为 times，以支持不同长度的重复
+      x = rep(c(samples[j], reference_sample), times = c(length(col1), length(col2))),
       levels = c(reference_sample, samples[j]),
       ordered = T
     )
+    
+    
     result_tmp <- dep_analysis(expr = expr_grouped, group = sample_pairs)
     result_tmp <- result_tmp[result_tmp$adj.P.Val < 0.05, ]
 
@@ -531,4 +539,32 @@ qc_cor <- function(expr_dt, meta_dt,
   )
 
   return(output_list)
+}
+
+#' Calculating Recall of nominal characteristics
+#' @param expr_dt A expression table file (at peptide level)
+#' @export
+qc_recall <- function(expr_dt) {
+  # Load reference data
+  data("reference_dataset", package = "protqc")
+  
+  # 获取"标称特性"列表 (Nominal List)
+  # 假设 reference_dataset 中的所有唯一肽段即为标称特性
+  nominal_peptides <- unique(reference_dataset$Sequence)
+  
+  # 获取当前数据检测到的肽段
+  # 假设 expr_dt 的第一列是 Sequence/ID
+  detected_peptides <- unique(expr_dt[, 1]) 
+  
+  # 计算交集与 Recall
+  n_nominal <- length(nominal_peptides)
+  n_detected_nominal <- length(intersect(detected_peptides, nominal_peptides))
+  
+  if (n_nominal == 0) {
+    recall_val <- NA
+  } else {
+    recall_val <- n_detected_nominal / n_nominal
+  }
+  
+  return(recall_val)
 }

@@ -16,6 +16,8 @@
 #' @importFrom flextable align
 #' @importFrom flextable width
 #' @importFrom flextable bold
+#' @importFrom flextable theme_box
+#' @importFrom flextable bg
 #' @importFrom ggplot2 ggplot
 #' @importFrom ggplot2 aes
 #' @importFrom ggplot2 geom_point
@@ -65,159 +67,180 @@ generate_protein_report <- function(qc_result,
   }
   output_file <- file.path(report_dir, report_name)
 
-  ### 创建Evaluate Metrics 表格
-
-  ft1 <- flextable(qc_result$conclusion)
-  ft1 <- ft1 %>%
-    color(~ Performance == "Bad", color = "#B80D0D", ~Performance) %>%
-    color(~ Performance == "Fair", color = "#D97C11", ~Performance) %>%
-    color(~ Performance == "Good", color = "#70C404", ~Performance) %>%
-    color(~ Performance == "Great", color = "#0F9115", ~Performance) %>%
-    width(width = 1.25) %>%
+  # --- 1. 定义中文文本内容 (基于 ShenKang-Quartet-Protein-Report_v0.2.docx) ---
+  
+  # 摘要
+  text_abstract <- "本报告基于多项组学关键质量控制指标，总结了 Quartet Protein参考物质所生成数据的质量情况。质量控制流程从用户输入肽段表达矩阵开始，分别计算每批次的检测特征数（Number of features）、标称特性召回率 (Recall of nominal characteristics)、信噪比 (Signal-to-Noise Ratio, SNR)、与参考数据集的相对相关性 (Relative Correlation with Reference Datasets, RC)及整体质量判断。"
+  
+  # 指标定义
+  def_features_title <- "检测特征数（Number of features）"
+  def_features_desc  <- "该指标反映在蛋白组检测中成功鉴定并映射到基因符号的蛋白数量。通常期望获得尽可能多的蛋白特征，以支持后续的生物学分析。"
+  
+  def_recall_title   <- "标称特性召回率（Recall of nominal characteristics）"
+  def_recall_desc    <- "定义为标称特性肽段在测试数据集中被成功检测到的比例。"
+  
+  def_snr_title      <- "信噪比（Signal-to-Noise Ratio, SNR）"
+  def_snr_desc       <- "用于刻画某一检测平台、实验室或批次区分不同生物样本组之间内在生物学差异（“信号”）与同一样本组技术重复变异（“噪声”）的能力。SNR 越高，表明区分多组样本差异的能力越强。"
+  
+  def_rc_title       <- "与参考数据集的相对相关性（Relative Correlation with Reference Datasets, RC）"
+  def_rc_desc        <- "用于评估测试数据在相对定量层面与参考数据集之间的一致性。在 shotgun 蛋白组学中，肽段层面的定量在理论上更为可靠。因此，参考数据集基于历史数据中各样本对 (D5/D6、F7/D6) 在肽段水平的相对表达值（log2FC）构建。在评估过程中，仅选取在测试数据与参考数据集中均覆盖、且满足统计学阈值（p < 0.05）的肽段 log2FC 作为输入，计算测试数据与参考数据之间的 Pearson 相关系数，作为 RC 指标。"
+  
+  # 参考文献
+  text_refs <- c(
+    "1. Zheng Y, et al. Multi-omics data integration using ratio-based quantitative profiling with Quartet reference materials. Nature Biotechnology, 2024.",
+    "2. Tian S, et al. Quartet protein reference materials and datasets for multi-platform assessment of label-free proteomics. Genome Biology, 2023.",
+    "3. 上海临床队列组学检测工作指引（征求意见稿）, 2025/11/26"
+  )
+  
+  # 免责声明
+  text_disclaimer <- "本数据质量报告仅针对所评估的特定数据集提供分析结果，仅供信息参考之用。尽管已尽最大努力确保分析结果的准确性和可靠性，但本报告按“现状（AS IS）”提供，不附带任何形式的明示或暗示担保。报告作者及发布方不对基于本报告内容所采取的任何行动承担责任。本报告中的结论不应被视为对任何产品或流程质量的最终判定，也不应用于关键应用场景、商业决策或法规合规用途，除非经过专业核查和独立验证。对于分析结果的正确性、准确性、可靠性或适用性，不作任何明示或暗示的保证。"
+  
+  # --- 2. 构建指标数据框 ---
+  
+  # 假设 qc_result$conclusion 是结果表格
+  # 假设 qc_result$results 包含 snr_plot 和 cor_plot
+  raw_table <- qc_result$conclusion
+  
+  # 辅助函数：安全提取 Value
+  get_val <- function(df, pattern) {
+    # 找到包含 Metric 名称的行
+    # 兼容 "Quality Metrics" 或第一列
+    col_idx <- grep("Quality.*Metrics", names(df), ignore.case = TRUE)
+    if (length(col_idx) == 0) col_idx <- 1
+    
+    # 找到 Value 对应的列
+    val_idx <- grep("^Value$", names(df), ignore.case = TRUE)
+    if (length(val_idx) == 0) val_idx <- 2
+    
+    # 提取
+    row_idx <- grep(pattern, df[[col_idx]], ignore.case = TRUE)
+    if (length(row_idx) > 0) return(as.numeric(df[[val_idx]][row_idx[1]]))
+    return(NA)
+  }
+  
+  val_feat   <- get_val(raw_table, "Number of features")
+  val_recall <- get_val(raw_table, "Recall")
+  val_snr    <- get_val(raw_table, "Signal-to-Noise Ratio")
+  val_rc     <- get_val(raw_table, "Relative Correlation")
+  
+  batch_name <- "QC_test" # 可改为从参数传入
+  
+  # 格式化与阈值判断
+  # 1. Features
+  str_feat <- ifelse(is.na(val_feat), "-", sprintf("%.0f", val_feat))
+  
+  # 2. Recall (>= 0.90)
+  if (is.na(val_recall)) {
+    str_recall <- "-"
+  } else {
+    str_recall <- sprintf("%.2f", val_recall)
+    if (val_recall < 0.90) str_recall <- paste0(str_recall, " ↓")
+  }
+  
+  # 3. SNR (>= 10)
+  if (is.na(val_snr)) {
+    str_snr <- "-"
+  } else {
+    str_snr <- sprintf("%.2f", val_snr)
+    if (val_snr < 10) str_snr <- paste0(str_snr, " ↓")
+  }
+  
+  # 4. RC (>= 0.80)
+  if (is.na(val_rc)) {
+    str_rc <- "-"
+  } else {
+    str_rc <- sprintf("%.2f", val_rc)
+    if (val_rc < 0.80) str_rc <- paste0(str_rc, " ↓")
+  }
+  
+  # 整体判断 (Pass = Recall>=0.90 & SNR>=10 & RC>=0.80)
+  if (!is.na(val_recall) && !is.na(val_snr) && !is.na(val_rc)) {
+    pass <- (val_recall >= 0.90) && (val_snr >= 10) && (val_rc >= 0.80)
+    str_qual <- ifelse(pass, "Pass", "No")
+  } else {
+    str_qual <- "No" # 数据缺失默认为 No
+  }
+  
+  # 构建 2行 x 6列 数据框
+  df_table <- data.frame(
+    "批次" = c("推荐质量标准", batch_name),
+    "检测特征数" = c("-", str_feat),
+    "标称特性召回率" = c("≥0.90", str_recall),
+    "信噪比" = c("≥10", str_snr),
+    "相对相关性" = c("≥0.80", str_rc),
+    "整体质量" = c("全部通过", str_qual),
+    check.names = FALSE
+  )
+  
+  # 创建 Flextable
+  ft1 <- flextable(df_table) %>%
+    theme_box() %>%
     align(align = "center", part = "all") %>%
-    bold(i = 7, part = "body")
-
-  ### 绘制Total score 历史分数排名散点图
-  qc_result$rank_table$Total_norm <- as.numeric(qc_result$rank_table$Total_norm)
-
-  p_rank_scatter_plot <- ggplot(data = qc_result$rank_table) +
-    # 添加四个区域
-    geom_rect(aes(xmin = 1, xmax = 3.47, ymin = -Inf, ymax = Inf), fill = "#B80D0D", alpha = 0.08) +
-    geom_rect(aes(xmin = 3.47, xmax = 4.19, ymin = -Inf, ymax = Inf), fill = "#D97C11", alpha = 0.08) +
-    geom_rect(aes(xmin = 4.19, xmax = 6.12, ymin = -Inf, ymax = Inf), fill = "#70C404", alpha = 0.08) +
-    geom_rect(aes(xmin = 6.12, xmax = 10, ymin = -Inf, ymax = Inf), fill = "#0F9115", alpha = 0.08) +
-    # 添加基础点图层
-    geom_point(aes(x = Total_norm, y = reorder(Batch, Total_norm))) +
-    # 突出显示 "QUERIED DATA" 对应的点
-    geom_point(
-      data = subset(qc_result$rank_table, Batch == "QUERIED DATA"),
-      aes(x = Total_norm, y = reorder(Batch, Total_norm)),
-      color = "orange", size = 3
-    ) +
-    # 自定义x轴刻度
-    scale_x_continuous(breaks = c(1, 3.47, 4.19, 6.12, 10)) +
-    theme_minimal() +
-    theme(
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.text = element_text(face = "bold"),
-      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
-    ) +
-    labs(
-      x = " ",
-      y = " ",
-      title = "Total Score"
-    )
-
-  #### 设置输出文本
-
-  ###### 第一部分
-  ### Assessment Summary
-  text_1 <- "The performance of the submitted data will be graded as Bad, Fair, Good, or Great based on the ranking by comparing the total score with the historical datasets. The total score is the harmonic mean of the scaled values of the number of features, missing percentage, absolute correlation, coefficient of variation, Signal-to-Noise Ratio (SNR), and relative correlation with reference datasets (RC)."
-  ### Four levels of performance
-  text_1_sup_1 <- "Based on the scaled total score, the submitted data will be ranked together with all Quartet historical datasets. The higher the score, the higher the ranking. After this, the performance levels will be assigned based on their ranking ranges."
-  text_1_sup_2 <- "· Bad - the bottom 20%."
-  text_1_sup_3 <- "· Fair - between bottom 20% and median 50%."
-  text_1_sup_4 <- "· Good - between median 50% and top 20%."
-  text_1_sup_5 <- "· Great - the top 20%."
-
-  #### 第二部分 Quality control metric
-
-  ### Performance Score
-  text_2 <- "Scores of evaluation metrics for the current batch and all historical batches assessed. Please note that the results shown here are scaled values for all batches in each metric. The name of your data is Queried_Data."
-  ### Signal-to-Noise Ratio
-  text_3 <- "SNR is established to characterize the power in discriminating multiple groups. The PCA plot is used to visualize the metric."
-  ### Correlation with Reference Datasets
-  text_4 <- "Relative correlation with reference datasets metric which was representing the numerical consistency of the relative expression profiles."
-
-  ### Method
-  supplementary_info_1 <- "The QC pipeline starts from the expression profiles at peptide/protein levels, and enables to calculate 6 metrics. A Total score is the geometric mean of the linearly normalized values of these metrics."
-  supplementary_info_1_1 <- "We expect as many proteins (mapped to gene symbols) as possible for downstreaming analyses."
-  supplementary_info_1_2 <- "Too many missing values interfere with comparability. This metric is calculated globally."
-  supplementary_info_1_3 <- "A CV value is calculated to indicate the dispersion within replicates feature by feature."
-  supplementary_info_1_4 <- "Pearson correlation reflects overall reproducibility within replicates. We calculate correlation coefficients between each two replicates within each biological sample (D5, D6, F7, M8), and take the median as the final value for absolute correlation."
-  supplementary_info_1_5 <- "SNR is established to characterize the ability of a platform or lab or batch, which is able to distinguish intrinsic differences among distinct biological sample groups ('signal') from variations in technical replicates of the same sample group ('noise')."
-  supplementary_info_1_6 <- "RC is used for assessment of quantitative consistency with the reference dataset at relative levels. For shotgun proteomics, quantitation at peptide levels is theoretically more reliable. Therefore, the reference dataset is established by benchmarking the relative expression values (log2FCs), for each peptide sequence of each sample pair (D5/D6, F7/D6, M8/D6), in historical datasets at peptide levels. We calculate relatively qualified (satisfied with thresholds of p < 0.05) log2FCs of the queried data, for overlapped peptides with the reference dataset, as the input for the assessment of quantitative consistency. Then RC value is Pearson correlation coefficient between the test dataset and the reference dataset."
-
-
-  ### Reference
-  supplementary_info_ref1 <- "1. Zheng, Y. et al. Multi-omics data integration using ratio-based quantitative profiling with Quartet reference materials. Nature Biotechnology 1–17 (2023)."
-  supplementary_info_ref2 <- "2. Tian, S. et al. Quartet protein reference materials and datasets for multi-platform assessment of label-free proteomics. Genome Biology 24, 202 (2023)."
-
-  ### Contact us
-  supplementary_info_2_1 <- "Fudan University Pharmacogenomics Research Center"
-  supplementary_info_2_2 <- "Project manager: Quartet Team"
-  supplementary_info_2_3 <- "Email: quartet@fudan.edu.cn"
-
-  ### Disclaimer
-  supplementary_info_3 <- "This quality control report is only for this specific test data set and doesn’t represent an evaluation of the business level of the sequencing company. This report is only used for scientific research, not for clinical or commercial use. We don’t bear any economic and legal liabilities for any benefits or losses (direct or indirect) from using the results of this report."
-
-  read_docx(report_template) %>%
-    ## 添加报告标题
-    body_add_par(value = "Quartet Report for Proteomics", style = "heading 1") %>%
-    ## 第一部分，Assessment Summary
-    body_add_par(value = "Assessment Summary", style = "heading 2") %>%
+    width(width = 1.1) %>%  # 适当调整列宽
+    bold(part = "header") %>%
+    bold(i = 1, part = "body") %>%
+    bg(part = "header", bg = "#EFEFEF") %>%
+    color(i = 2, j = "整体质量", color = ifelse(str_qual == "No", "#B80D0D", "black"))
+  
+  # --- 3. 生成报告流程 (Pipeline) ---
+  
+  doc <- read_docx(report_template) %>%
+    # 1. 标题
+    body_add_par(value = "Quartet蛋白肽段组质量报告", style = "heading 1") %>%
+    
+    # 2. 摘要
+    body_add_par(value = "摘要", style = "heading 2") %>%
+    body_add_par(value = text_abstract, style = "Normal") %>%
+    body_add_par(value = " ", style = "Normal") %>% # 空行
+    
+    # 3. 表格
     body_add_flextable(ft1) %>%
-    body_add_break() %>%
-    ### 第二部分 Quality control metric
-    body_add_par(value = "Quality Control Metric", style = "heading 2") %>%
-    body_add_par(value = supplementary_info_1, style = "Normal") %>%
-    body_add_par(value = "Number of features:", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_1_1, style = "Normal") %>%
-    body_add_par(value = "Missing percentage (%):", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_1_2, style = "Normal") %>%
-    body_add_par(value = "Coefficient of variantion (CV %):", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_1_3, style = "Normal") %>%
-    body_add_par(value = "Absolute Correlation:", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_1_4, style = "Normal") %>%
-    body_add_par(value = "Signal-to-Noise Ratio (SNR):", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_1_5, style = "Normal") %>%
-    body_add_par(value = "Relative Correlation with Reference Datasets (RC):", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_1_6, style = "Normal") %>%
-    body_add_par(value = "Total Score:", style = "heading 3") %>%
-    body_add_par(value = text_1, style = "Normal") %>%
-    ## 分页
-    body_add_break() %>%
-    body_add_par(value = "Performance Category:", style = "heading 3") %>%
-    body_add_par(value = text_1_sup_1, style = "Normal") %>%
-    body_add_par(value = text_1_sup_2, style = "Normal") %>%
-    body_add_par(value = text_1_sup_3, style = "Normal") %>%
-    body_add_par(value = text_1_sup_4, style = "Normal") %>%
-    body_add_par(value = text_1_sup_5, style = "Normal") %>%
-    ### 排名散点图
-    body_add_par(value = "Performance Score", style = "heading 2") %>%
-    body_add_gg(value = p_rank_scatter_plot, style = "centered") %>%
-    body_add_par(value = text_2, style = "Normal") %>%
-    ## 分页
-    body_add_break() %>%
-    ## 信噪比
+    
+    # 4. 质量控制指标定义
+    body_add_par(value = "质量控制指标", style = "heading 2") %>%
+    
+    body_add_par(value = def_features_title, style = "heading 3") %>%
+    body_add_par(value = def_features_desc, style = "Normal") %>%
+    
+    body_add_par(value = def_recall_title, style = "heading 3") %>%
+    body_add_par(value = def_recall_desc, style = "Normal") %>%
+    
+    body_add_par(value = def_snr_title, style = "heading 3") %>%
+    body_add_par(value = def_snr_desc, style = "Normal") %>%
+    
+    body_add_par(value = def_rc_title, style = "heading 3") %>%
+    body_add_par(value = def_rc_desc, style = "Normal") %>%
+    
+    # # 5. 图片 (SNR 和 Correlation)
+    # # 确保 qc_result 中有这些 plot 对象
+    # body_add_par(value = "Signal-to-Noise Ratio", style = "heading 2") %>%
+    # body_add_gg(value = qc_result$results$snr_results$snr_plot, style = "centered") %>%
+    # body_add_break() %>%
+    # 
+    # body_add_par(value = "Correlation with Reference Datasets", style = "heading 2") %>%
+    # body_add_gg(value = qc_result$results$cor_results$cor_plot, style = "centered") %>%
+    # body_add_break() %>%
+    
+    # 6. 参考文献
+    body_add_par(value = "参考文献", style = "heading 2") %>%
+    body_add_par(value = text_refs[1], style = "Normal") %>%
+    body_add_par(value = text_refs[2], style = "Normal") %>%
+    body_add_par(value = text_refs[3], style = "Normal") %>%
+    body_add_par(value = " ", style = "Normal") %>%
+    
+    # 7. 免责声明
+    body_add_par(value = "免责声明", style = "heading 3") %>%
+    body_add_par(value = text_disclaimer, style = "Normal") %>%
+  
+    # 5. 图片 (SNR 和 Correlation)
+    # 确保 qc_result 中有这些 plot 对象
     body_add_par(value = "Signal-to-Noise Ratio", style = "heading 2") %>%
-    body_add_gg(qc_result$results$snr_results$snr_plot, style = "centered") %>%
-    body_add_par(value = text_3, style = "Normal") %>%
-    ## 分页
+    body_add_gg(value = qc_result$results$snr_results$snr_plot, style = "centered") %>%
     body_add_break() %>%
-    ## RC
+    
     body_add_par(value = "Correlation with Reference Datasets", style = "heading 2") %>%
-    body_add_gg(qc_result$results$cor_results$cor_plot, style = "centered") %>%
-    body_add_par(value = text_4, style = "Normal") %>%
-    ## 分页
-    body_add_break() %>%
-    ### 附加信息
-    body_add_par(value = "Supplementary Information", style = "heading 2") %>%
-    # body_add_par(value = "Method", style = "heading 3") %>%
-    # body_add_par(value = supplementary_info_1_1, style = "Normal") %>%
-    # body_add_par(value = supplementary_info_1_2, style = "Normal") %>%
-    # body_add_par(value = supplementary_info_1_3, style = "Normal") %>%
-
-    body_add_par(value = "Reference", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_ref1, style = "Normal") %>%
-    body_add_par(value = supplementary_info_ref2, style = "Normal") %>%
-    body_add_par(value = "Contact us", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_2_1, style = "Normal") %>%
-    body_add_par(value = supplementary_info_2_2, style = "Normal") %>%
-    body_add_par(value = supplementary_info_2_3, style = "Normal") %>%
-    body_add_par(value = "Disclaimer", style = "heading 3") %>%
-    body_add_par(value = supplementary_info_3, style = "Normal") %>%
-    ## 输出文件
-    print(target = output_file)
+    body_add_gg(value = qc_result$results$cor_results$cor_plot, style = "centered") %>%
+  
+  # 输出文件
+  print(doc, target = output_file)
 }

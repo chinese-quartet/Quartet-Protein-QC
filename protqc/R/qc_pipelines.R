@@ -70,8 +70,15 @@ qc_allmetrics <- function(pro_dt, meta_dt, pep_dt = NULL,
   # SNR -----------------------------------------
   snr_results <- qc_snr(pro_dt, meta_dt, output_dir, plot)
   snr_value <- snr_results$SNR
-
-  # RC ------------------------------------------
+  
+  # 3. Recall (自动使用内置 reference_dataset_quali)
+  if (!is.null(pep_dt)) {
+    recall_value <- qc_recall(pep_dt, meta_dt = meta_dt)
+  } else {
+    recall_value <- NA
+  }
+  
+  # 4. RC (自动使用内置 reference_dataset_quant)
   if (!is.null(pep_dt)) {
     cor_results <- qc_cor(pep_dt, meta_dt, output_dir, plot)
     cor_value <- cor_results$COR
@@ -86,15 +93,17 @@ qc_allmetrics <- function(pro_dt, meta_dt, pep_dt = NULL,
     "Missing percentage (%)",
     "Absolute Correlation",
     "Coefficient of variantion (CV, %)",
+    "Recall",
     "Signal-to-Noise Ratio (SNR)",
     "Relative Correlation with Reference Datasets (RC)"
   )
-  qc_values <- c(pro_info, snr_value, cor_value)
+  # qc_values <- c(pro_info, snr_value, cor_value)
+  qc_values <- c(pro_info, recall_value, snr_value, cor_value)
 
   # Output --------------------------------------
   output_table <- data.table(
     "Quality Metrics" = metrics,
-    "Value" = c(pro_info, snr_value, cor_value)
+    "Value" = qc_values
   )
 
   all_results <- list(
@@ -122,27 +131,40 @@ qc_total <- function(allmetrics_dt,
   metrics <- allmetrics_dt$`Quality Metrics`
   for (m in metrics) {
     x <- allmetrics_dt$Value[allmetrics_dt$`Quality Metrics` %in% m]
-    x_ref_norm <- as.numeric(ref_qc_norm[, colnames(ref_qc_norm) %in% m])
-    x_ref <- ref_qc[, colnames(ref_qc) %in% m]
 
-    if (!is.na(x)) {
-      x_max <- max(x_ref, na.rm = T)
-      x_min <- min(x_ref, na.rm = T)
-      if (m %in% c(
-        "Coefficient of variantion (CV, %)",
-        "Missing percentage (%)"
-      )) {
-        x_norm <- qc_linear_norm(x, x_min, x_max, decreasing = T)
+    # --- 修改开始：增加检查，看该指标是否存在于历史数据中 ---
+    # 检查 m 是否在 ref_qc 的列名中
+    if (m %in% colnames(ref_qc)) {
+      # 如果历史数据里有这个指标 (比如 SNR, RC)，正常计算
+      x_ref_norm <- as.numeric(ref_qc_norm[, colnames(ref_qc_norm) %in% m])
+      x_ref <- ref_qc[, colnames(ref_qc) %in% m]
+      
+      if (!is.na(x)) {
+        x_max <- max(x_ref, na.rm = T)
+        x_min <- min(x_ref, na.rm = T)
+        if (m %in% c(
+          "Coefficient of variantion (CV, %)",
+          "Missing percentage (%)"
+        )) {
+          x_norm <- qc_linear_norm(x, x_min, x_max, decreasing = T)
+        } else {
+          x_norm <- qc_linear_norm(x, x_min, x_max)
+        }
+        x_rank <- qc_rank(x_norm, x_ref_norm)
+        x_class <- qc_performance(x_norm, x_ref_norm)
       } else {
-        x_norm <- qc_linear_norm(x, x_min, x_max)
+        x_norm <- NA
+        x_rank <- NA
+        x_class <- NA
       }
-      x_rank <- qc_rank(x_norm, x_ref_norm)
-      x_class <- qc_performance(x_norm, x_ref_norm)
     } else {
-      x_norm <- NA
-      x_rank <- NA
-      x_class <- NA
+      # --- 如果历史数据里没有这个指标 (比如 Recall) ---
+      # 跳过排名计算，赋予默认值，防止报错
+      x_norm <- NA    # 无法归一化
+      x_rank <- "-"   # 无法排名
+      x_class <- "-"  # 无法评级 (Bad/Good)
     }
+    # --- 修改结束 ---
 
     output_norm <- c(output_norm, x_norm)
     output_rank <- c(output_rank, x_rank)
@@ -150,9 +172,19 @@ qc_total <- function(allmetrics_dt,
   }
 
   # Normalize & Rank: Total score ----------------------
+  # 计算 Total Score 时，需要排除掉那些没有归一化值的指标 (Recall)
+  valid_norms <- as.numeric(output_norm[!is.na(output_norm)])
+  
   total_ref <- as.numeric(ref_qc_norm$Total)
-  total_value <- round(geometric.mean(as.numeric(output_norm)), 3)
-  total_norm <- qc_linear_norm(total_value, min(total_ref), max(total_ref))
+  
+  # 使用几何平均数计算 Total Score (只基于 valid_norms)
+  if (length(valid_norms) > 0) {
+    total_value <- round(geometric.mean(valid_norms), 3)
+    total_norm <- qc_linear_norm(total_value, min(total_ref), max(total_ref))
+  } else {
+    total_value <- 0
+    total_norm <- 0
+  }
 
   total_ref_norm <- as.numeric(ref_qc_norm$Total_norm)
   total_rank <- qc_rank(total_norm, total_ref_norm)
@@ -171,18 +203,41 @@ qc_total <- function(allmetrics_dt,
       "Value" = total_norm
     )
   )
+  # Merge 时使用 all.x = TRUE 防止因为指标缺失导致行丢失
   output_table <- merge(
     allmetrics_dt,
     ref_qc_stat,
-    by = "Quality Metrics"
+    by = "Quality Metrics",
+    all.x = TRUE 
   )
-  output_table <- cbind(
-    output_table[c(4, 3, 1, 2, 6, 5, 7), ],
-    data.table(
-      "Rank" = c(output_rank, total_rank),
-      "Performance" = c(output_class, total_c)
-    )
-  )
+  
+  # 因为 merge 可能会打乱顺序，或者有了新指标，简单的行索引 (output_table[c(4,3...)]) 可能会出错
+  # 建议根据 metrics 的顺序重新排列，或者保持 merge 后的顺序
+  # 这里为了保持你的代码风格，我们只修复报错
+  
+  # 重新构建最终表格
+  # 注意：Rank 和 Performance 的长度现在和 output_table 的行数对应
+  # 我们通过匹配 Quality Metrics 来赋值，而不是假定行号
+  
+  output_table$Rank <- NA
+  output_table$Performance <- NA
+  
+  # 填入计算好的 Rank 和 Performance (除 Total 外)
+  for(i in 1:length(metrics)) {
+    row_idx <- which(output_table$`Quality Metrics` == metrics[i])
+    if(length(row_idx) > 0) {
+      output_table$Rank[row_idx] <- output_rank[i]
+      output_table$Performance[row_idx] <- output_class[i]
+    }
+  }
+  
+  # 填入 Total Score 的 Rank 和 Performance
+  total_row <- which(output_table$`Quality Metrics` == "Total Score")
+  if(length(total_row) > 0) {
+    output_table$Rank[total_row] <- total_rank
+    output_table$Performance[total_row] <- total_c
+  }
+  
   output_list <- list(
     Normalized = allnorm_dt,
     Raw = output_table
