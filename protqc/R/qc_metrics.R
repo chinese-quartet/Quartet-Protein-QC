@@ -310,9 +310,30 @@ dep_analysis <- function(expr, group) {
 qc_cor <- function(expr_dt, meta_dt,
                    output_dir = NULL, plot = FALSE, show_sample_pairs = TRUE) {
   # Load data ------------------------------------------------------
-  # load(system.file("data/reference_dataset.rda", package = "protqc"))
-  data("reference_dataset", package = "protqc")
+
+  # # 1. 加载内置的定量数据集 (Quantitative / RC)
+  # utils::data("reference_dataset_quant", package = "protqc", envir = environment())
+  # ref_raw <- reference_dataset_quant
+  # 
+  # # 2. 列名映射与提取
+  # # 你的 CSV 列名: group, peptide_sequence, value
+  # # 我们需要映射为: Sample.Pair, Sequence, logFC 以适配原有逻辑
+  # if (!all(c("group", "peptide_sequence", "value") %in% colnames(ref_raw))) {
+  #   stop("Built-in reference_dataset_quant is missing: group, peptide_sequence, value")
+  # }
+  # 
+  # ref_dt <- data.frame(
+  #   Sequence = ref_raw$peptide_sequence,
+  #   Sample.Pair = ref_raw$group,
+  #   logFC = ref_raw$value,
+  #   stringsAsFactors = FALSE
+  # )
+  
+  # 1. 回滚：使用原来的 reference_dataset
+  utils::data("reference_dataset", package = "protqc", envir = environment())
   ref_dt <- reference_dataset
+  
+  # 3. 数据预处理 (保持原有逻辑)
   expr_ncol <- ncol(expr_dt)
   expr_df <- data.frame(expr_dt[, 2:expr_ncol], row.names = expr_dt[, 1])
   expr_matrix <- as.matrix(expr_df)
@@ -373,24 +394,41 @@ qc_cor <- function(expr_dt, meta_dt,
       ordered = T
     )
     
+    if (nrow(expr_grouped) > 0) {
+      result_tmp <- dep_analysis(expr = expr_grouped, group = sample_pairs)
+      result_tmp <- result_tmp[result_tmp$adj.P.Val < 0.05, ]
+      result_final <- rbind(result_final, result_tmp)
+    }
     
-    result_tmp <- dep_analysis(expr = expr_grouped, group = sample_pairs)
-    result_tmp <- result_tmp[result_tmp$adj.P.Val < 0.05, ]
-
-    result_final <- rbind(result_final, result_tmp)
   }
 
   # Calculating: RC -----------------------------------------------
+  if (is.null(result_final) || nrow(result_final) == 0) {
+    return(list(DEPs = NULL, logfc = NULL, COR = NA, cor_plot = NULL))
+  }
+  
   result_final <- as.data.table(result_final)
-  result_trim <- result_final[, c(7, 11, 1)]
-  result_trim$name <- apply(result_trim, 1, function(x) paste(x[1], x[2]))
-  ref_dt$name <- apply(ref_dt, 1, function(x) paste(x[1], x[2]))
+  # 提取测试结果的关键列
+  # 注意：dep_analysis 返回结果中 Sequence 是第一列/行名
+  result_trim <- data.frame(
+    Sequence = result_final$Sequence,
+    Sample.Pair = result_final$Sample.Pair,
+    logFC.Test = result_final$logFC
+  )
+  
+  # 构建合并键
+  result_trim$name <- paste(result_trim$Sequence, result_trim$Sample.Pair)
+  ref_dt$name <- paste(ref_dt$Sequence, ref_dt$Sample.Pair)
+  # 合并 (Inner Join)
   result_withref <- merge(result_trim, ref_dt, by = "name")
 
-  df_test <- data.frame(result_withref[, c(1, 2, 3, 4, 7)])
-  colnames(df_test) <- c(
-    "Name", "Sequence", "Sample.Pair",
-    "logFC.Test", "logFC.Reference"
+  # 整理最终表格用于绘图和计算
+  df_test <- data.frame(
+    Name = result_withref$name,
+    Sequence = result_withref$Sequence.x,
+    Sample.Pair = result_withref$Sample.Pair.x,
+    logFC.Test = result_withref$logFC.Test,
+    logFC.Reference = result_withref$log2FC # 来自参考集的 value
   )
 
   cor_value <- cor(x = df_test$logFC.Test, y = df_test$logFC.Reference)
@@ -451,6 +489,7 @@ qc_cor <- function(expr_dt, meta_dt,
   # }
 
   # Plot ----------------------------------------------------------
+  p <- NULL
   if (plot) {
     text_custom_theme <- element_text(
       size = 16,
@@ -519,17 +558,17 @@ qc_cor <- function(expr_dt, meta_dt,
     }
   }
 
-  # Save & Output -------------------------------------------------
-  if (!is.null(output_dir)) {
-    if (plot) {
-      output_dir_final1 <- file.path(output_dir, "corr_plot.png")
-      ggsave(output_dir_final1, p, height = 5.5, width = 5.5)
-    }
-    output_dir_final2 <- file.path(output_dir, "deps_table.tsv")
-    output_dir_final3 <- file.path(output_dir, "corr_table.tsv")
-    write.table(result_final, output_dir_final2, sep = "\t", row.names = F)
-    write.table(df_test, output_dir_final3, sep = "\t", row.names = F)
-  }
+  # # Save & Output -------------------------------------------------
+  # if (!is.null(output_dir)) {
+  #   if (plot) {
+  #     output_dir_final1 <- file.path(output_dir, "corr_plot.png")
+  #     ggsave(output_dir_final1, p, height = 5.5, width = 5.5)
+  #   }
+  #   output_dir_final2 <- file.path(output_dir, "deps_table.tsv")
+  #   output_dir_final3 <- file.path(output_dir, "corr_table.tsv")
+  #   write.table(result_final, output_dir_final2, sep = "\t", row.names = F)
+  #   write.table(df_test, output_dir_final3, sep = "\t", row.names = F)
+  # }
 
   output_list <- list(
     DEPs = result_final,
@@ -543,28 +582,77 @@ qc_cor <- function(expr_dt, meta_dt,
 
 #' Calculating Recall of nominal characteristics
 #' @param expr_dt A expression table file (at peptide level)
+#' @param meta_dt A metadata file (to map library to sample type)
 #' @export
-qc_recall <- function(expr_dt) {
-  # Load reference data
-  data("reference_dataset", package = "protqc")
+qc_recall <- function(expr_dt, meta_dt) {
   
-  # 获取"标称特性"列表 (Nominal List)
-  # 假设 reference_dataset 中的所有唯一肽段即为标称特性
-  nominal_peptides <- unique(reference_dataset$Sequence)
+  # 1. 加载内置的定性数据集 (Qualitative / Recall)
+  # 使用 utils::data 加载，确保不受用户环境影响
+  utils::data("reference_dataset_quali", package = "protqc", envir = environment())
+  ref_dt <- reference_dataset_quali
   
-  # 获取当前数据检测到的肽段
-  # 假设 expr_dt 的第一列是 Sequence/ID
-  detected_peptides <- unique(expr_dt[, 1]) 
-  
-  # 计算交集与 Recall
-  n_nominal <- length(nominal_peptides)
-  n_detected_nominal <- length(intersect(detected_peptides, nominal_peptides))
-  
-  if (n_nominal == 0) {
-    recall_val <- NA
-  } else {
-    recall_val <- n_detected_nominal / n_nominal
+  # 2. 数据清洗
+  # A. 检查列名 (根据你的 CSV: sample, peptide_sequence)
+  if (!all(c("sample", "peptide_sequence") %in% colnames(ref_dt))) {
+    stop("Built-in reference_dataset_quali is missing required columns: sample, peptide_sequence")
   }
   
-  return(recall_val)
+  # B. 样本名标准化: 去除 "Quartet " 前缀 (例如 "Quartet D5" -> "D5")
+  # 这样才能和 metadata 中的 sample (D5, D6...) 匹配
+  ref_dt$sample_clean <- gsub("Quartet ", "", ref_dt$sample)
+  
+  # 3. 确定共有样本类型
+  sample_types <- unique(meta_dt$sample)
+  ref_sample_types <- unique(ref_dt$sample_clean)
+  common_types <- intersect(sample_types, ref_sample_types)
+  
+  if (length(common_types) == 0) {
+    warning("No common sample types found between metadata and reference dataset.")
+    return(NA)
+  }
+  
+  group_recalls <- c()
+  
+  # 4. 遍历每一类样本 (D5, D6, F7, M8) 进行计算
+  for (st in common_types) {
+    # 分母: 该类样本的参考肽段集合
+    ref_seqs <- unique(ref_dt$peptide_sequence[ref_dt$sample_clean == st])
+    n_ref <- length(ref_seqs)
+    
+    if (n_ref == 0) next
+    
+    # 获取该类样本对应的 Library ID
+    libs <- meta_dt$library[meta_dt$sample == st]
+    valid_libs <- libs[libs %in% colnames(expr_dt)]
+    
+    if (length(valid_libs) == 0) next
+    
+    # 对每一个样本(Library)单独计算 Recall
+    lib_recalls <- c()
+    for (lib in valid_libs) {
+      # 提取检测到的肽段 (假设非 NA 且 > 0 为检测到)
+      vals <- expr_dt[[lib]]
+      detected_idx <- which(!is.na(vals) & vals > 0)
+      
+      # expr_dt 第一列通常是 Peptide Sequence
+      det_seqs <- expr_dt[[1]][detected_idx]
+      
+      # 分子: 交集数量
+      n_det_ref <- length(intersect(det_seqs, ref_seqs))
+      
+      rec <- n_det_ref / n_ref
+      lib_recalls <- c(lib_recalls, rec)
+    }
+    
+    # 取该类样本的平均 Recall
+    if (length(lib_recalls) > 0) {
+      group_recalls <- c(group_recalls, mean(lib_recalls))
+    }
+  }
+  
+  if (length(group_recalls) == 0) return(NA)
+  
+  # 5. 最终结果: 所有类别的平均 Recall
+  final_recall <- mean(group_recalls)
+  return(final_recall)
 }
