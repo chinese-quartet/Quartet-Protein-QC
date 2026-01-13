@@ -61,9 +61,29 @@ qc_conclusion <- function(exp_path, meta_path, output_dir = NULL, plot = TRUE) {
 
   # Save & Output --------------------------------------
   output_table2 <- output_list$Normalized
-  output_table_o <- output_table2[order(output_table2$`Quality Metrics`), ]
-  ref_qc_norm_new <- rbind(ref_qc_norm, c("QUERIED DATA", output_table_o$Value))
-
+  # output_table_o <- output_table2[order(output_table2$`Quality Metrics`), ]
+  # ref_qc_norm_new <- rbind(ref_qc_norm, c("QUERIED DATA", output_table_o$Value))
+  
+  # 1. 创建一个具名向量，方便按名称索引数值
+  # 注意：Value 可能是数值型，c("QUERIED DATA", ...) 会将其转为字符型，这与原逻辑保持一致
+  current_vals <- setNames(output_table2$Value, output_table2$`Quality Metrics`)
+  
+  # 2. 获取历史数据 (ref_qc_norm) 的列名
+  # 假设第一列是 ID 列（如 "Library" 或 "Batch"），其余列是指标名称
+  hist_cols <- colnames(ref_qc_norm)
+  metric_cols <- hist_cols[-1] # 排除第一列 ID
+  
+  # 3. 仅提取历史数据中存在的指标
+  # 如果 output_table2 中包含 "Recall" 但 ref_qc_norm 中没有，这里就会自动过滤掉 "Recall"
+  vals_to_bind <- current_vals[metric_cols]
+  
+  # 4. 构建要合并的行，确保长度和顺序与 ref_qc_norm 严格一致
+  new_row <- c("QUERIED DATA", vals_to_bind)
+  
+  # 5. 合并
+  ref_qc_norm_new <- rbind(ref_qc_norm, new_row)
+  
+  
   if (!is.null(output_dir)) {
     output_dir_cutoff <- file.path(output_dir, "cutoff_table.tsv")
     output_dir_rank <- file.path(output_dir, "rank_table.tsv")
