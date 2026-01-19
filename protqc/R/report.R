@@ -150,7 +150,7 @@ generate_protein_report <- function(qc_result,
     str_rc <- "-"
   } else {
     str_rc <- sprintf("%.2f", val_rc)
-    if (val_rc < 0.80) str_rc <- paste0(str_rc, " ↓")
+    # if (val_rc < 0.80) str_rc <- paste0(str_rc, " ↓")
   }
 
   # # 整体判断 (Pass = Recall>=0.90 & SNR>=10 & RC>=0.80)
@@ -175,7 +175,7 @@ generate_protein_report <- function(qc_result,
     "标称特性灵敏度" = c("≥0.90", str_recall),
     "信噪比" = c("≥10", str_snr),
     "Pearson相关系数" = c("≥0.80", str_rc),
-    "整体质量" = c("全部通过", str_qual),
+    "是否通过" = c("-", str_qual),
     check.names = FALSE
   )
 
@@ -188,7 +188,7 @@ generate_protein_report <- function(qc_result,
     bold(part = "header") %>%
     bold(i = 1, part = "body") %>%
     bg(part = "header", bg = "#EFEFEF") %>%
-    color(i = 2, j = "整体质量", color = ifelse(str_qual == "No", "#B80D0D", "black"))
+    color(i = 2, j = "是否通过", color = ifelse(str_qual == "No", "#B80D0D", "black"))
 
   # --- 3. 生成报告流程 (Pipeline) ---
 
