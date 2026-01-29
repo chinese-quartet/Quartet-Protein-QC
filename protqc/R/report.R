@@ -74,16 +74,16 @@ generate_protein_report <- function(qc_result,
 
   # 指标定义
   def_features_title <- "检测特征数（Number of features）"
-  def_features_desc  <- "该指标反映在蛋白组检测中成功鉴定并映射到基因符号的蛋白数量。通常期望获得尽可能多的蛋白特征，以支持后续的生物学分析。"
+  def_features_desc <- "该指标反映在蛋白组检测中成功鉴定并映射到基因符号的蛋白数量。通常期望获得尽可能多的蛋白特征，以支持后续的生物学分析。"
 
-  def_recall_title   <- "标称特性灵敏度（Recall of nominal characteristics）"
-  def_recall_desc    <- "定义为标称特性肽段在测试数据集中被成功检测到的比例。"
+  def_recall_title <- "标称特性灵敏度（Recall of nominal characteristics）"
+  def_recall_desc <- "定义为标称特性肽段在测试数据集中被成功检测到的比例。"
 
-  def_snr_title      <- "信噪比（Signal-to-Noise Ratio, SNR）"
-  def_snr_desc       <- "用于刻画某一检测平台、实验室或批次区分不同生物样本组之间内在生物学差异（“信号”）与同一样本组技术重复变异（“噪声”）的能力。SNR 越高，表明区分多组样本差异的能力越强。"
+  def_snr_title <- "信噪比（Signal-to-Noise Ratio, SNR）"
+  def_snr_desc <- "用于刻画某一检测平台、实验室或批次区分不同生物样本组之间内在生物学差异（“信号”）与同一样本组技术重复变异（“噪声”）的能力。SNR 越高，表明区分多组样本差异的能力越强。"
 
-  def_rc_title       <- "与参考数据集的Pearson相关系数（Pearson correlation coefficient, PCC）"
-  def_rc_desc        <- "用于评估测试数据在相对定量层面与参考数据集之间的一致性。在 shotgun 蛋白组学中，肽段层面的定量在理论上更为可靠。因此，参考数据集基于历史数据中各样本对 (D5/D6、F7/D6) 在肽段水平的相对表达值（log2FC）构建。在评估过程中，仅选取在测试数据与参考数据集中均覆盖、且满足统计学阈值（p < 0.05）的肽段 log2FC 作为输入，计算测试数据与参考数据之间的 Pearson 相关系数，作为 RC 指标。"
+  def_rc_title <- "与参考数据集的Pearson相关系数（Pearson correlation coefficient, PCC）"
+  def_rc_desc <- "用于评估测试数据在相对定量层面与参考数据集之间的一致性。在 shotgun 蛋白组学中，肽段层面的定量在理论上更为可靠。因此，参考数据集基于历史数据中各样本对 (D5/D6、F7/D6) 在肽段水平的相对表达值（log2FC）构建。在评估过程中，仅选取在测试数据与参考数据集中均覆盖、且满足统计学阈值（p < 0.05）的肽段 log2FC 作为输入，计算测试数据与参考数据之间的 Pearson 相关系数，作为 RC 指标。"
 
   # 参考文献
   text_refs <- c(
@@ -114,14 +114,16 @@ generate_protein_report <- function(qc_result,
 
     # 提取
     row_idx <- grep(pattern, df[[col_idx]], ignore.case = TRUE)
-    if (length(row_idx) > 0) return(as.numeric(df[[val_idx]][row_idx[1]]))
+    if (length(row_idx) > 0) {
+      return(as.numeric(df[[val_idx]][row_idx[1]]))
+    }
     return(NA)
   }
 
-  val_feat   <- get_val(raw_table, "Number of features")
+  val_feat <- get_val(raw_table, "Number of features")
   val_recall <- get_val(raw_table, "Recall")
-  val_snr    <- get_val(raw_table, "Signal-to-Noise Ratio")
-  val_rc     <- get_val(raw_table, "Relative Correlation")
+  val_snr <- get_val(raw_table, "Signal-to-Noise Ratio")
+  val_rc <- get_val(raw_table, "Relative Correlation")
 
   batch_name <- "Query_data" # 可改为从参数传入
 
@@ -184,7 +186,7 @@ generate_protein_report <- function(qc_result,
     theme_box() %>%
     flextable::font(part = "all", fontname = "Times New Roman") %>%
     align(align = "center", part = "all") %>%
-    width(width = 1.1) %>%  # 适当调整列宽
+    width(width = 1.1) %>% # 适当调整列宽
     bold(part = "header") %>%
     bold(i = 1, part = "body") %>%
     bg(part = "header", bg = "#EFEFEF") %>%
@@ -195,7 +197,6 @@ generate_protein_report <- function(qc_result,
   doc <- read_docx(report_template) %>%
     # 1. 标题
     body_add_par(value = "Quartet蛋白肽段组质量报告", style = "heading 1") %>%
-
     # 2. 摘要
     body_add_par(value = "摘要", style = "heading 2") %>%
     body_add_par(value = text_abstract, style = "Normal") %>%
@@ -203,22 +204,16 @@ generate_protein_report <- function(qc_result,
 
     # 3. 表格
     body_add_flextable(ft1) %>%
-
     # 4. 质量控制指标定义
     body_add_par(value = "质量控制指标", style = "heading 2") %>%
-
     body_add_par(value = def_features_title, style = "heading 3") %>%
     body_add_par(value = def_features_desc, style = "Normal") %>%
-
     body_add_par(value = def_recall_title, style = "heading 3") %>%
     body_add_par(value = def_recall_desc, style = "Normal") %>%
-
     body_add_par(value = def_snr_title, style = "heading 3") %>%
     body_add_par(value = def_snr_desc, style = "Normal") %>%
-
     body_add_par(value = def_rc_title, style = "heading 3") %>%
     body_add_par(value = def_rc_desc, style = "Normal") %>%
-
     # # 5. 图片 (SNR 和 Correlation)
     # # 确保 qc_result 中有这些 plot 对象
     # body_add_par(value = "Signal-to-Noise Ratio", style = "heading 2") %>%
@@ -235,18 +230,15 @@ generate_protein_report <- function(qc_result,
     body_add_par(value = text_refs[2], style = "Normal") %>%
     body_add_par(value = text_refs[3], style = "Normal") %>%
     body_add_par(value = " ", style = "Normal") %>%
-
     # 6. 免责声明
     body_add_par(value = "免责声明", style = "heading 3") %>%
     body_add_par(value = text_disclaimer, style = "Normal") %>%
     body_add_break() %>%
-
     # 7. 图片 (SNR 和 Correlation)
     # 确保 qc_result 中有这些 plot 对象
     body_add_par(value = "Signal-to-Noise Ratio", style = "heading 2") %>%
     body_add_gg(value = qc_result$results$snr_results$snr_plot, style = "centered") %>%
     body_add_break() %>%
-
     body_add_par(value = "Pearson Correlation Coefficient", style = "heading 2") %>%
     body_add_gg(value = qc_result$results$cor_results$cor_plot, style = "centered")
 

@@ -49,3 +49,4 @@ po/*~
 rsconnect/
 
 output/
+.DS_Store
