@@ -14,6 +14,21 @@ input_data <- function(exp_path, meta_path) {
   meta <- fread(meta_path)
 
   expr <- as.data.frame(expr)
+  # --- [修改开始] 表头大小写标准化 ---
+  
+  # 1. 第一列强制转小写 (TYPE/FEATURE -> type/feature)
+  if (ncol(expr) >= 1) {
+    colnames(expr)[1] <- tolower(colnames(expr)[1])
+  }
+  
+  # 2. 第二列如果是关键字则转小写，如果是样本名则保留原样
+  if (ncol(expr) >= 2) {
+    if (tolower(colnames(expr)[2]) %in% c("type", "feature")) {
+      colnames(expr)[2] <- tolower(colnames(expr)[2])
+    }
+  }
+  # --- [修改结束] ---
+  
   meta <- meta %>%
     rename_with(tolower)
 
@@ -42,7 +57,7 @@ input_data <- function(exp_path, meta_path) {
     print(1)
   }
 
-  col_check2 <- c("Type", "Feature") %in% colnames(expr)
+  col_check2 <- c("type", "feature") %in% colnames(expr)
   if (col_check2[1] & col_check2[2]) {
     col_check3 <- colnames(expr)[3:ncol(expr)] %in% meta_final$library
     if (length(which(!col_check3)) == 0) {
@@ -60,7 +75,7 @@ input_data <- function(exp_path, meta_path) {
     if (length(which(!col_check3)) == 0) {
       expr_pro <- expr
       expr_pep <- NULL
-      colnames(expr_pro) <- c("Feature", colnames(expr_pro)[2:ncol(expr_pro)])
+      colnames(expr_pro) <- c("feature", colnames(expr_pro)[2:ncol(expr_pro)])
     } else {
       stop("The column names does not correspond to input metadata.")
     }
