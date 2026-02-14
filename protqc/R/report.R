@@ -136,7 +136,7 @@ generate_protein_report <- function(qc_result,
     str_recall <- "-"
   } else {
     str_recall <- sprintf("%.2f", val_recall)
-    if (val_recall < 0.90) str_recall <- paste0(str_recall, " ↓")
+    # if (val_recall < 0.90) str_recall <- paste0(str_recall, " ↓")
   }
 
   # 3. SNR (>= 10)
@@ -163,8 +163,9 @@ generate_protein_report <- function(qc_result,
   #   str_qual <- "No" # 数据缺失默认为 No
   # }
 
-  if (!is.na(val_recall) && !is.na(val_snr)) {
+  # if (!is.na(val_recall) && !is.na(val_snr)) {
     # pass <- (val_recall >= 0.90) && (val_snr >= 10)
+  if (!is.na(val_snr)) {
     pass <- (val_snr >= 10)
     str_qual <- ifelse(pass, "Yes", "No")
   } else {
