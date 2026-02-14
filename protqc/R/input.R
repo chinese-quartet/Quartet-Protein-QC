@@ -20,7 +20,7 @@ input_data <- function(exp_path, meta_path) {
   if (ncol(expr) >= 1) {
     colnames(expr)[1] <- tolower(colnames(expr)[1])
   }
-  
+
   # 2. 第二列如果是关键字则转小写，如果是样本名则保留原样
   if (ncol(expr) >= 2) {
     if (tolower(colnames(expr)[2]) %in% c("type", "feature")) {

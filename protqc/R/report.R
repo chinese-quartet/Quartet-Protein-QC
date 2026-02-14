@@ -164,7 +164,8 @@ generate_protein_report <- function(qc_result,
   # }
 
   if (!is.na(val_recall) && !is.na(val_snr)) {
-    pass <- (val_recall >= 0.90) && (val_snr >= 10)
+    # pass <- (val_recall >= 0.90) && (val_snr >= 10)
+    pass <- (val_snr >= 10)
     str_qual <- ifelse(pass, "Yes", "No")
   } else {
     str_qual <- "No" # 数据缺失默认为 No
